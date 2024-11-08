@@ -270,7 +270,7 @@ if __name__ == "__main__":
             plot_losses(epochs_tensor.to('cpu'), tokens_seen, train_losses, val_losses)
     else:
         if input('free edition? ') == 'y':
-            model.load_state_dict(torch.load("model2.pth", weights_only=True))
+            model.load_state_dict(torch.load("model.pth", weights_only=True))
             model.to(device)
         else:
             from gpt_download import download_and_load_gpt2
