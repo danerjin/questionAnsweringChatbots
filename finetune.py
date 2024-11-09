@@ -221,7 +221,7 @@ if __name__ == "__main__":
         file_name_model = input('file name? ')
         torch.save(model.state_dict(), f"{file_name_model}.pth")
 
-        from ch5 import plot_losses
+        from pretrain import plot_losses
         epochs_tensor = torch.linspace(0, num_epochs, len(train_losses))
         plot_losses(epochs_tensor, tokens_seen, train_losses, val_losses)
     else:
