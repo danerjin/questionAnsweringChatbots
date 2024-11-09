@@ -7,6 +7,7 @@ import time
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 import numpy as np
+import math
 
 GPT_CONFIG_124M = {
     'vocab_size': 50257,
@@ -33,7 +34,7 @@ def calc_loss_batch(input_batch, target_batch, model, device):
     return loss
 
 
-def calc_loss_loader(data_loader, model, device, num_batches = None):
+def calc_loss_loader(data_loader, model, device, num_batches=None):
     total_loss = 0.
     if len(data_loader) == 0:
         return float('nan')
@@ -83,6 +84,65 @@ def train_model_simple(model, train_loader, val_loader,
         generate_and_print_sample(
             model, tokenizer, device, start_context
         )
+    return train_losses, val_losses, track_tokens_seen
+
+
+def train_model(model, train_loader, val_loader,
+                optimizer, device, num_epochs,
+                eval_freq, eval_iter, start_context, tokenizer):
+    initial_lr = 0.0001
+    peak_lr = 0.01
+    warmup_steps = 20
+    min_lr = 0.1 * initial_lr
+    track_lrs = []
+    lr_increment = (peak_lr-initial_lr) / warmup_steps
+    total_steps = len(train_loader) * num_epochs
+    warmup_steps = int(0.2 * total_steps)
+
+    optimizer = torch.optim.AdamW(model.parameters(), weight_decay=0.1)
+    train_losses, val_losses, track_tokens_seen = [], [], []
+    tokens_seen, global_step = 0, -1
+    start_time = time.time()
+
+    for epoch in range(num_epochs):
+        for input_batch, target_batch in train_loader:
+            optimizer.zero_grad()
+            global_step += 1
+
+            if global_step < warmup_steps:
+                lr = initial_lr + global_step * lr_increment
+            else:
+                progress = ((global_step - warmup_steps) /
+                            (total_steps - warmup_steps))
+                lr = min_lr + (peak_lr - min_lr) * 0.5 *(
+                    1+math.cos(math.pi * progress)
+                )
+            for param_group in optimizer.param_groups:
+                param_group["lr"] = lr
+            track_lrs.append(optimizer.param_groups[0]["lr"])
+
+            loss = calc_loss_batch(
+                input_batch, target_batch, model, device
+            )
+            loss.backward()
+            optimizer.step()
+            tokens_seen += input_batch.numel()
+            global_step += 1
+
+            if global_step % eval_freq == 0:
+                train_loss, val_loss = evaluate_model(
+                    model, train_loader, val_loader, device, eval_iter
+                )
+                train_losses.append(train_loss)
+                val_losses.append(val_loss)
+                track_tokens_seen.append(tokens_seen)
+                print(f"Ep {epoch+1} (Step {global_step:06d}) time {time.time()-start_time}: "
+                      f"Train loss {train_loss:.3f}, "
+                      f"Val loss {val_loss:.3f}")
+        generate_and_print_sample(
+            model, tokenizer, device, start_context
+        )
+
     return train_losses, val_losses, track_tokens_seen
 
 
@@ -257,7 +317,7 @@ if __name__ == "__main__":
         print("Training loss:", train_loss)
         print("Validation loss:", val_loss)
 
-        train_losses, val_losses, tokens_seen = train_model_simple(
+        train_losses, val_losses, tokens_seen = train_model(
             model, train_loader, val_loader, optimizer, device,
             num_epochs=num_epochs, eval_freq=5, eval_iter=5,
             start_context="Every effort moves you", tokenizer=tokenizer
