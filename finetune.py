@@ -7,7 +7,7 @@ import tiktoken
 from functools import partial
 from torch.utils.data import DataLoader
 from generation import generate, text_to_token_ids, token_ids_to_text
-from pretrain import calc_loss_loader, train_model_simple, load_weights_into_gpt
+from pretrain import calc_loss_loader, train_model, load_weights_into_gpt
 import time
 from gpt_download import download_and_load_gpt2
 from model import GPTModel
@@ -208,7 +208,7 @@ if __name__ == "__main__":
     num_epochs = 2
 
     if input('train? ') == 'y':
-        train_losses, val_losses, tokens_seen = train_model_simple(
+        train_losses, val_losses, tokens_seen = train_model(
             model, train_loader, val_loader, optimizer, device,
             num_epochs=num_epochs, eval_freq=5, eval_iter=5,
             start_context=format_input(val_data[0]), tokenizer=tokenizer
