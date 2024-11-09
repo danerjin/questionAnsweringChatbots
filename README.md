@@ -1,5 +1,5 @@
 ### Question-Answering Chatbots  
-Right now, this is just running GPT2 in pure Pytorch  
+Right now, this is just running GPT2 text generator and a chatbot in pure Pytorch (no RAG yet)  
 model.py - contains outline for GPT model  
 data_prep.py - helper functions for dataloader  
 generation.py - helper functions for text generation  
