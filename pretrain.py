@@ -10,20 +10,6 @@ import numpy as np
 import math
 from tqdm import tqdm
 
-GPT_CONFIG_124M = {
-    'vocab_size': 50257,
-    'context_length': 256,
-    'emb_dim': 768,
-    'n_heads': 12,
-    'n_layers': 12,
-    'drop_rate': 0.1,
-    'qkv_bias': False
-}
-
-
-model = GPTModel(GPT_CONFIG_124M)
-model.eval()
-
 
 def calc_loss_batch(input_batch, target_batch, model, device):
     input_batch = input_batch.to(device)
@@ -257,12 +243,24 @@ def assign(left, right):
 
 
 if __name__ == "__main__":
+    GPT_CONFIG_124M = {
+        'vocab_size': 50257,
+        'context_length': 256,
+        'emb_dim': 768,
+        'n_heads': 12,
+        'n_layers': 12,
+        'drop_rate': 0.1,
+        'qkv_bias': False
+    }
+
+    model = GPTModel(GPT_CONFIG_124M)
+    model.eval()
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     model.to(device)
 
     start_context = "Every effort moves you"
     tokenizer = tiktoken.get_encoding("gpt2")
-
+    '''
     token_ids = generate_text_simple(
         model=model,
         idx=text_to_token_ids(start_context, tokenizer),
@@ -270,6 +268,7 @@ if __name__ == "__main__":
         context_size=GPT_CONFIG_124M["context_length"]
     )
     print("Output text:\n", token_ids_to_text(token_ids, tokenizer))
+    '''
 
     file_path = input('file name? ')+'.txt'
     with open(file_path, "r", encoding = "utf-8") as file:
@@ -318,7 +317,7 @@ if __name__ == "__main__":
         print("Training loss:", train_loss)
         print("Validation loss:", val_loss)
 
-        train_losses, val_losses, tokens_seen = train_model(
+        train_losses, val_losses, tokens_seen = train_model_simple(
             model, train_loader, val_loader, optimizer, device,
             num_epochs=num_epochs, eval_freq=50, eval_iter=5,
             start_context="Every effort moves you", tokenizer=tokenizer
