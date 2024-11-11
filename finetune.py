@@ -7,10 +7,10 @@ import tiktoken
 from functools import partial
 from torch.utils.data import DataLoader
 from generation import generate, text_to_token_ids, token_ids_to_text
-from pretrain import calc_loss_loader, train_model, load_weights_into_gpt
+from pretrain import calc_loss_loader, train_model, train_model_simple, load_weights_into_gpt
 import time
 from gpt_download import download_and_load_gpt2
-from model import GPTModel
+from model import GPTModel, replace_linear_with_lora
 
 
 def download_and_load_file(file_path, url):
@@ -174,7 +174,7 @@ if __name__ == "__main__":
         'gpt2-xl (1558M)': {'emb_dim': 1600, 'n_layers': 48, 'n_heads': 25}
     }
 
-    CHOOSE_MODEL = "gpt2-medium (355M)"
+    CHOOSE_MODEL = "gpt2-small (124M)"
     BASE_CONFIG.update(model_configs[CHOOSE_MODEL])
 
     model_size = CHOOSE_MODEL.split(" ")[-1].lstrip('(').rstrip(')')
@@ -208,9 +208,20 @@ if __name__ == "__main__":
     num_epochs = 2
 
     if input('train? ') == 'y':
-        train_losses, val_losses, tokens_seen = train_model(
+        if input('Use LORA? ') == 'y':
+            total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+            print(f"Total trainable parameters before: {total_params:,}")
+
+            for param in model.parameters():
+                param.requires_grad = False
+            replace_linear_with_lora(model, rank=16, alpha=16)
+            total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+            print(f"Total trainable LORA parameters: {total_params:,}")
+        model.to(device)
+
+        train_losses, val_losses, tokens_seen = train_model_simple(
             model, train_loader, val_loader, optimizer, device,
-            num_epochs=num_epochs, eval_freq=5, eval_iter=5,
+            num_epochs=num_epochs, eval_freq=50, eval_iter=5,
             start_context=format_input(val_data[0]), tokenizer=tokenizer
         )
         end_time = time.time()
@@ -228,24 +239,29 @@ if __name__ == "__main__":
         x = input('file name? ')
         model.load_state_dict(torch.load(f"{x}.pth", weights_only=True))
         model.to(device)
-        question = input('User: ')
-        additional = input('User: ')
-        if additional == '':
-            additional = None
-        entry = {
-            'instruction': question,
-            'input': additional,
-            'output': ''
-        }
-        input_text = format_input(entry)
-        token_ids = generate(
-            model=model,
-            idx=text_to_token_ids(input_text, tokenizer).to(device),
-            max_new_tokens=256,
-            context_size=BASE_CONFIG["context_length"],
-            eos_id=50256
-        )
-        generated_text = token_ids_to_text(token_ids, tokenizer)
-        response_text = generated_text[len(input_text):]
-        print(input_text, end='')
-        print(response_text)
+        input_text = ''
+        while True:
+            question = input('User: ')
+            if question == 'q':
+                break
+            additional = input('User: ')
+            if additional == '':
+                additional = None
+            entry = {
+                'instruction': question,
+                'input': additional,
+                'output': ''
+            }
+            input_text = input_text + format_input(entry)
+            token_ids = generate(
+                model=model,
+                idx=text_to_token_ids(input_text, tokenizer).to(device),
+                max_new_tokens=256,
+                context_size=BASE_CONFIG["context_length"],
+                eos_id=50256
+            )
+            generated_text = token_ids_to_text(token_ids, tokenizer)
+            response_text = generated_text[len(input_text):]
+            # print(input_text, end='')
+            print("Assistant: " + response_text)
+            input_text = input_text + "Assistant: "+response_text

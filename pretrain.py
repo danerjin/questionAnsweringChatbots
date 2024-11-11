@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 import numpy as np
 import math
+from tqdm import tqdm
 
 GPT_CONFIG_124M = {
     'vocab_size': 50257,
@@ -78,7 +79,7 @@ def train_model_simple(model, train_loader, val_loader,
                 train_losses.append(train_loss)
                 val_losses.append(val_loss)
                 track_tokens_seen.append(tokens_seen)
-                print(f"Ep {epoch+1} (Step {global_step:06d}) time {time.time()-start_time}: "
+                print(f"Ep {epoch+1} (Step {global_step:06d}/{len(train_loader):06d}) time {(time.time()-start_time):02f}: "
                       f"Train loss {train_loss:.3f}, "
                       f"Val loss {val_loss:.3f}")
         generate_and_print_sample(
@@ -104,7 +105,7 @@ def train_model(model, train_loader, val_loader,
     tokens_seen, global_step = 0, -1
     start_time = time.time()
 
-    for epoch in range(num_epochs):
+    for epoch in tqdm(range(num_epochs)):
         for input_batch, target_batch in train_loader:
             optimizer.zero_grad()
             global_step += 1
@@ -136,7 +137,7 @@ def train_model(model, train_loader, val_loader,
                 train_losses.append(train_loss)
                 val_losses.append(val_loss)
                 track_tokens_seen.append(tokens_seen)
-                print(f"Ep {epoch+1} (Step {global_step:06d}) time {time.time()-start_time}: "
+                print(f"Ep {epoch+1} (Step {global_step:06d} / {len(train_loader):06d}) time {time.time()-start_time:.2f}: "
                       f"Train loss {train_loss:.3f}, "
                       f"Val loss {val_loss:.3f}")
         generate_and_print_sample(
@@ -150,10 +151,10 @@ def evaluate_model(model, train_loader, val_loader, device, eval_iter):
     model.eval()
     with torch.no_grad():
         train_loss = calc_loss_loader(
-            train_loader, model, device, num_batches = eval_iter
+            train_loader, model, device, num_batches=eval_iter
         )
         val_loss = calc_loss_loader(
-            val_loader, model, device, num_batches = eval_iter
+            val_loader, model, device, num_batches=eval_iter
         )
     model.train()
     return train_loss, val_loss
@@ -319,7 +320,7 @@ if __name__ == "__main__":
 
         train_losses, val_losses, tokens_seen = train_model(
             model, train_loader, val_loader, optimizer, device,
-            num_epochs=num_epochs, eval_freq=5, eval_iter=5,
+            num_epochs=num_epochs, eval_freq=50, eval_iter=5,
             start_context="Every effort moves you", tokenizer=tokenizer
         )
         model.to('cpu')

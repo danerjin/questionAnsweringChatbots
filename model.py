@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import math
 
 
 class LayerNorm(nn.Module):
@@ -11,9 +12,9 @@ class LayerNorm(nn.Module):
 
     def forward(self, x):
         mean = x.mean(dim=-1, keepdim=True)
-        var = x.var(dim=-1, keepdim=True, unbiased = False)
-        norm_x = (x-mean) / torch.sqrt(var+self.eps)
-        return self.scale*norm_x+self.shift
+        var = x.var(dim=-1, keepdim=True, unbiased=False)
+        norm_x = (x - mean) / torch.sqrt(var + self.eps)
+        return self.scale * norm_x + self.shift
 
 
 class GELU(nn.Module):
@@ -21,7 +22,7 @@ class GELU(nn.Module):
         super().__init__()
 
     def forward(self, x):
-        return 0.5 * x * (1+torch.tanh(torch.sqrt(torch.tensor(2.0/torch.pi))*(x+0.044715*torch.pow(x,3))))
+        return 0.5 * x * (1 + torch.tanh(torch.sqrt(torch.tensor(2.0 / torch.pi)) * (x + 0.044715 * torch.pow(x, 3))))
 
 
 class FeedForward(nn.Module):
@@ -51,7 +52,7 @@ class MultiHeadAttention(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.register_buffer(
             "mask",
-            torch.triu(torch.ones(context_length,context_length), diagonal=1)
+            torch.triu(torch.ones(context_length, context_length), diagonal=1)
         )
 
     def forward(self, x):
@@ -147,3 +148,36 @@ class GPTModel(nn.Module):
         x = self.final_norm(x)
         logits = self.out_head(x)
         return logits
+
+
+class LORALayer(nn.Module):
+    def __init__(self, in_dim, out_dim, rank, alpha):
+        super().__init__()
+        self.A = torch.nn.Parameter(torch.empty(in_dim, rank))
+        torch.nn.init.kaiming_uniform_(self.A, a=math.sqrt(5))
+        self.B = torch.nn.Parameter(torch.zeros(rank, out_dim))
+        self.alpha = alpha
+
+    def forward(self, x):
+        x = self.alpha * (x @ self.A @ self.B)
+        return x
+
+
+class LinearWithLORA(nn.Module):
+    def __init__(self, linear, rank, alpha):
+        super().__init__()
+        self.linear = linear
+        self.lora = LORALayer(
+            linear.in_features, linear.out_features, rank, alpha
+        )
+
+    def forward(self, x):
+        return self.linear(x) + self.lora(x)
+
+
+def replace_linear_with_lora(model, rank, alpha):
+    for name, module in model.named_children():
+        if isinstance(module, torch.nn.Linear):
+            setattr(model, name, LinearWithLORA(module, rank, alpha))
+        else:
+            replace_linear_with_lora(module, rank, alpha)
