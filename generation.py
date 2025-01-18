@@ -47,6 +47,44 @@ def text_to_token_ids(text, tokenizer):
     return encoded_tensor
 
 
+def text_to_token_ids_batch(text, tokenizer, max_length=1024, pad_token_id=50256):
+    a = 0
+    encoded = tokenizer.encode(text, allowed_special={'<|endoftext|>'})
+    x = encoded
+    if len(encoded) > a:
+        a = len(encoded)
+    # max_length = min(max_length, a)
+    x = x[:max_length]
+    x = x + [pad_token_id] * (max_length - len(x))
+    print(len(x))
+    # encoded_tensor = torch.tensor(x)
+    # print(encoded_tensor.shape)
+    return x  # encoded_tensor
+
+
+def text_to_token_ids_batch_total(text_lst, tokenizer, max_length=1024, pad_token_id=50256):
+    x = []
+    a = 0
+    for text in text_lst:
+        encoded = tokenizer.encode(text, allowed_special={'<|endoftext|>'})
+        x.append(encoded)
+        if len(encoded) > a:
+            a = len(encoded)
+    max_length = min(max_length, a)
+    x = [
+        text[:max_length]
+        for text in x
+    ]
+    x = [
+        text + [pad_token_id] *
+        (max_length - len(text))
+        for text in x
+    ]
+    # encoded_tensor = torch.tensor(x)
+    # print(encoded_tensor.shape)
+    return x  # encoded_tensor
+
+
 def token_ids_to_text(token_ids, tokenizer):
     flat = token_ids.squeeze(0)
     return tokenizer.decode(flat.tolist())

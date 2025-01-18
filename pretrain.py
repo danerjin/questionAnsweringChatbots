@@ -238,7 +238,8 @@ def load_weights_into_gpt(gpt, params):
 
 def assign(left, right):
     if left.shape != right.shape:
-        raise ValueError(f"Shape mismatch. Left: {left.shape}, Right: {right.shape}")
+        return torch.nn.Parameter(left.clone().detach())
+        # raise ValueError(f"Shape mismatch. Left: {left.shape}, Right: {right.shape}")
     return torch.nn.Parameter(torch.tensor(right))
 
 
@@ -335,7 +336,7 @@ if __name__ == "__main__":
         else:
             from gpt_download import download_and_load_gpt2
             settings, params = download_and_load_gpt2(
-                model_size="355M", models_dir="gpt2"
+                model_size="124M", models_dir="gpt2"
             )
             model_configs = {
                 'gpt2-small (124M)': {'emb_dim': 768, 'n_layers': 12, 'n_heads': 12},
@@ -343,36 +344,27 @@ if __name__ == "__main__":
                 'gpt2-large (774M)': {'emb_dim': 1280, 'n_layers': 36, 'n_heads': 20},
                 'gpt2-xl (1558M)': {'emb_dim': 1600, 'n_layers': 48, 'n_heads': 25}
             }
-            model_name = 'gpt2-medium (355M)'
+            model_name = 'gpt2-small (124M)'
             NEW_CONFIG = GPT_CONFIG_124M.copy()
             NEW_CONFIG.update(model_configs[model_name])
             NEW_CONFIG.update({'context_length': 1024})
             NEW_CONFIG.update({"qkv_bias": True})
-            gpt = GPTModel(NEW_CONFIG)
-            gpt.eval()
-            load_weights_into_gpt(gpt, params)
-            gpt.to(device)
-    try:
-        gpt.to('cpu')
-        eos_id = tokenizer.encode('<|endoftext|>')[0]
-        token_ids = generate(
-            model=gpt,
-            idx=text_to_token_ids("Every effort moves you", tokenizer),
-            max_new_tokens=50,
-            context_size=NEW_CONFIG['context_length'],
-            top_k=25,
-            temperature=1.4,
-            eos_id=eos_id
-        )
-        print("Output text:\n", token_ids_to_text(token_ids, tokenizer))
-    except:
+            model = GPTModel(NEW_CONFIG)
+            model.eval()
+            load_weights_into_gpt(model, params)
+            model.to(device)
+    if 1:
         model.to('cpu')
-        token_ids = generate(
-            model=model,
-            idx=text_to_token_ids("Every effort moves you", tokenizer),
-            max_new_tokens=50,
-            context_size=GPT_CONFIG_124M['context_length'],
-            top_k=25,
-            temperature=1.4
-        )
-        print("Output text:\n", token_ids_to_text(token_ids, tokenizer))
+        while 1:
+            x = input()
+            if x == 'q':
+                break
+            token_ids = generate(
+                model=model,
+                idx=text_to_token_ids(x, tokenizer),
+                max_new_tokens=50,
+                context_size=GPT_CONFIG_124M['context_length'],
+                top_k=25,
+                temperature=1.4
+            )
+            print("Output text:\n", token_ids_to_text(token_ids, tokenizer))

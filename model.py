@@ -44,7 +44,7 @@ class MultiHeadAttention(nn.Module):
         assert (d_out % num_heads == 0), "d_out must be divisible by num_heads"
         self.d_out = d_out
         self.num_heads = num_heads
-        self.head_dim = d_out//num_heads
+        self.head_dim = d_out // num_heads
         self.W_query = nn.Linear(d_in, d_out, bias=qkv_bias)
         self.W_key = nn.Linear(d_in, d_out, bias=qkv_bias)
         self.W_value = nn.Linear(d_in, d_out, bias=qkv_bias)
@@ -163,6 +163,22 @@ class LORALayer(nn.Module):
         return x
 
 
+class LORALayer2(nn.Module):
+    def __init__(self, in_dim, out_dim, rank, alpha):
+        super().__init__()
+        self.A = torch.nn.Linear(in_dim, rank, bias=False)
+        self.B = torch.nn.Linear(rank, out_dim, bias=False)
+        self.alpha = alpha
+        self.A.weight.data.zero_()
+        self.B.weight.data.zero_()
+
+    def forward(self, x):
+        x = self.A(x)
+        x = self.B(x)
+        x = self.alpha * x
+        return x
+
+
 class LinearWithLORA(nn.Module):
     def __init__(self, linear, rank, alpha):
         super().__init__()
@@ -181,3 +197,37 @@ def replace_linear_with_lora(model, rank, alpha):
             setattr(model, name, LinearWithLORA(module, rank, alpha))
         else:
             replace_linear_with_lora(module, rank, alpha)
+
+
+class Embedding(GPTModel):
+    def __init__(self, cfg):
+        super().__init__(cfg)
+        self.emb_dim = cfg["emb_dim"]
+        self.out_head = torch.nn.Linear(
+            in_features=cfg["emb_dim"],
+            out_features=384
+        )
+        '''
+        with torch.no_grad():
+            self.out_head.weight.fill_(0)
+            self.out_head.weight.fill_diagonal_(1)
+            self.out_head.bias.fill_(0)
+        '''
+
+    def forward(self, in_idx):
+        batch_size, seq_len = in_idx.shape
+        tok_embeds = self.tok_emb(in_idx)
+
+        pos_embeds = self.pos_emb(
+            torch.arange(seq_len, device=in_idx.device)
+        )
+        x = tok_embeds+pos_embeds
+        x = self.drop_emb(x)
+        x = self.trf_blocks(x)
+        x = self.final_norm(x)
+        logits = self.out_head(x)
+        # logits = torch.mean(logits, dim=1)
+        return logits
+
+    def mean_pooling(self, a):
+        pass

@@ -48,6 +48,10 @@ def download_file(url, destination):
     # Send a GET request to download the file
 
     try:
+        if os.path.exists(destination):
+            if True:
+                print(f"File already exists and is up-to-date: {destination}")
+                return
         with urllib.request.urlopen(url) as response:
             # Get the total file size from headers, defaulting to 0 if not present
             file_size = int(response.headers.get("Content-Length", 0))

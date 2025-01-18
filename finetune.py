@@ -1,11 +1,11 @@
 import json
 import os
 import urllib.request
+import random
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 import tiktoken
 from functools import partial
-from torch.utils.data import DataLoader
 from generation import generate, text_to_token_ids, token_ids_to_text
 from pretrain import calc_loss_loader, train_model, train_model_simple, load_weights_into_gpt
 import time
@@ -19,19 +19,46 @@ def download_and_load_file(file_path, url):
             text_data = response.read().decode('utf-8')
         with open(file_path, 'w', encoding='utf-8') as file:
             file.write(text_data)
-    else:
-        with open(file_path, 'r', encoding='utf-8') as file:
-            text_data = file.read()
     with open(file_path, 'r') as file:
         data = json.load(file)
     return data
 
 
 def format_input(entry):
-    instruction_text=(
-        f"User:\n{entry['instruction']} {(entry['input'] if entry['input'] else '')}\nAssistant:\n"
-    )
+    if entry['instruction'][-1] == "." and not entry['input'] == '':
+        instruction_text = (
+            f"<user>:\n{entry['instruction'][:-1]}: {(entry['input'] if entry['input'] else '')}\n<assistant>:\n"
+        )
+    else:
+        instruction_text = (
+            f"<user>:\n{entry['instruction']} {(entry['input'] if entry['input'] else '')}\n<assistant>:\n"
+        )
     return instruction_text
+
+
+def format_input_simple(entry):
+    if 'input' not in entry:
+        return (
+            f"{entry['instruction']}"
+        )
+    if entry['instruction'][-1] == "." and not entry['input'] == '':
+        instruction_text = (
+            f"{entry['instruction'][:-1]}: {(entry['input'] if entry['input'] else '')}"
+        )
+    else:
+        instruction_text = (
+            f"{entry['instruction']} {(entry['input'] if entry['input'] else '')}"
+        )
+    return instruction_text
+
+
+def extract_response(query, generated_text):
+    response_text = (
+        generated_text[len(query):]
+        .replace("<assistant:>", "")
+        .strip()
+    )
+    return response_text
 
 
 def custom_collate_fn(
@@ -94,10 +121,11 @@ if __name__ == "__main__":
     file_path = 'instruction-data.json'
 
     url = (
-        "https://raw.githubusercontent.com/tatsu-lab/stanford_alpaca/refs/heads/main/alpaca_data.json"
+        "https://raw.githubusercontent.com/rasbt/LLMs-from-scratch/main/ch07/01_main-chapter-code/instruction-data.json"
     )
 
     data = download_and_load_file(file_path, url)
+    data = data[:int(len(data))]
     print("Number of entries:", len(data))
 
     train_portion = int(len(data)*0.85)
@@ -107,6 +135,12 @@ if __name__ == "__main__":
     train_data = data[:train_portion]
     test_data = data[train_portion:train_portion+test_portion]
     val_data = data[train_portion+test_portion:]
+
+    '''
+    train_data = random.sample(train_data, int(len(train_data)/2000))
+    test_data = random.sample(test_data, int(len(test_data)/2000))
+    val_data = random.sample(val_data, int(len(val_data)/2000))
+    '''
 
     print('Training set length:', len(train_data))
     print('Testing set length:', len(test_data))
@@ -118,7 +152,10 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() else 'cpu')
     if torch.backends.mps.is_available():
-        device = torch.device('mps')
+        if input("use mps? ")=='y':
+            device = torch.device('mps')
+        else:
+            device = torch.device('cpu')
     print('Device:', device)
 
     customized_collate_fn = partial(
@@ -174,7 +211,9 @@ if __name__ == "__main__":
         'gpt2-xl (1558M)': {'emb_dim': 1600, 'n_layers': 48, 'n_heads': 25}
     }
 
-    CHOOSE_MODEL = "gpt2-small (124M)"
+    CHOOSE_MODEL = "gpt2-large (774M)"
+    # CHOOSE_MODEL = "gpt2-medium (355M)"
+    # CHOOSE_MODEL = "gpt2-small (124M)"
     BASE_CONFIG.update(model_configs[CHOOSE_MODEL])
 
     model_size = CHOOSE_MODEL.split(" ")[-1].lstrip('(').rstrip(')')
@@ -207,16 +246,17 @@ if __name__ == "__main__":
 
     num_epochs = 2
 
-    if input('train? ') == 'y':
-        if input('Use LORA? ') == 'y':
-            total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-            print(f"Total trainable parameters before: {total_params:,}")
+    if input('Use LORA? ') == 'y':
+        total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        print(f"Total trainable parameters before: {total_params:,}")
 
-            for param in model.parameters():
-                param.requires_grad = False
-            replace_linear_with_lora(model, rank=16, alpha=16)
-            total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-            print(f"Total trainable LORA parameters: {total_params:,}")
+        for param in model.parameters():
+            param.requires_grad = False
+        replace_linear_with_lora(model, rank=16, alpha=16)
+        total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        print(f"Total trainable LORA parameters: {total_params:,}")
+
+    if input('train? ') == 'y':
         model.to(device)
 
         train_losses, val_losses, tokens_seen = train_model_simple(
@@ -235,6 +275,80 @@ if __name__ == "__main__":
         from pretrain import plot_losses
         epochs_tensor = torch.linspace(0, num_epochs, len(train_losses))
         plot_losses(epochs_tensor, tokens_seen, train_losses, val_losses)
+        if input('train further using alpaca? ') == 'y':
+            file_path = 'instruction-data-.json'
+            url = "https://raw.githubusercontent.com/gururise/AlpacaDataCleaned/refs/heads/main/alpaca_data_cleaned.json"
+            data = download_and_load_file(file_path, url)
+            data = data[:1000]
+            print("Number of entries:", len(data))
+
+            train_portion = int(len(data)*0.85)
+            test_portion = int(len(data)*0.1)
+            val_portion = len(data) - train_portion - test_portion
+
+            train_data = data[:train_portion]
+            test_data = data[train_portion:train_portion+test_portion]
+            val_data = data[train_portion+test_portion:]
+
+            '''
+            train_data = random.sample(train_data, int(len(train_data)/2000))
+            test_data = random.sample(test_data, int(len(test_data)/2000))
+            val_data = random.sample(val_data, int(len(val_data)/2000))
+            '''
+
+            print('Training set length:', len(train_data))
+            print('Testing set length:', len(test_data))
+            print('Validation set length:', len(val_data))
+
+            num_workers = 0
+            batch_size = 2
+
+            train_dataset = InstructionDataset(train_data, tokenizer)
+            train_loader = DataLoader(
+                train_dataset,
+                batch_size=batch_size,
+                collate_fn=customized_collate_fn,
+                shuffle=True,
+                drop_last=True,
+                num_workers=num_workers
+            )
+
+            val_dataset = InstructionDataset(val_data, tokenizer)
+            val_loader = DataLoader(
+                val_dataset,
+                batch_size=batch_size,
+                collate_fn=customized_collate_fn,
+                shuffle=True,
+                drop_last=True,
+                num_workers=num_workers
+            )
+
+            test_dataset = InstructionDataset(test_data, tokenizer)
+            test_loader = DataLoader(
+                test_dataset,
+                batch_size=batch_size,
+                collate_fn=customized_collate_fn,
+                shuffle=True,
+                drop_last=True,
+                num_workers=num_workers
+            )
+
+            train_losses, val_losses, tokens_seen = train_model_simple(
+                model, train_loader, val_loader, optimizer, device,
+                num_epochs=num_epochs, eval_freq=50, eval_iter=5,
+                start_context=format_input(val_data[0]), tokenizer=tokenizer
+            )
+            end_time = time.time()
+            execution_time_minutes = (end_time-start_time) / 60
+            print(f"Training completed in {execution_time_minutes:.2f} minutes.")
+
+            model.to('cpu')
+            file_name_model = input('file name? ')
+            torch.save(model.state_dict(), f"{file_name_model}.pth")
+
+            from pretrain import plot_losses
+            epochs_tensor = torch.linspace(0, num_epochs, len(train_losses))
+            plot_losses(epochs_tensor, tokens_seen, train_losses, val_losses)
     else:
         x = input('file name? ')
         model.load_state_dict(torch.load(f"{x}.pth", weights_only=True))
@@ -244,12 +358,12 @@ if __name__ == "__main__":
             question = input('User: ')
             if question == 'q':
                 break
-            additional = input('User: ')
-            if additional == '':
-                additional = None
+            if question == 'r':
+                input_text = ''
+                continue
             entry = {
                 'instruction': question,
-                'input': additional,
+                'input': None,
                 'output': ''
             }
             input_text = input_text + format_input(entry)
@@ -264,4 +378,4 @@ if __name__ == "__main__":
             response_text = generated_text[len(input_text):]
             # print(input_text, end='')
             print("Assistant: " + response_text)
-            input_text = input_text + "Assistant: "+response_text
+            input_text = input_text + response_text
