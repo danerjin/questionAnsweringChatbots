@@ -21,9 +21,18 @@ Then, finetune the embedding model:
 Finally, evaluate the RAG system:   
 `python eval.py`
 
-## DATA:   
+# Explanation:  
+We start off with GPT2, and we load pre-trained weights from OpenAI. This is our foundation model.  
+We finetune foundation model to act as a chatbot -- using [AlpacaDataCleaned](https://github.com/gururise/AlpacaDataCleaned), formatted using Phi-3 prompt template.   
+We also finetune foundation model to act as embedding model using transfer learning -- replace last layer. Finetune using STSB.   
+Build Retrieval System - similar to attention. Unfortunately, did not have time to train key, query matrices.  
+
+# Flowchart (How it is calculated):   
+![Flowchart](https://raw.githubusercontent.com/danerjin/questionAnsweringChatbots/refs/heads/main/flowchart.png)   
+
+# Data:   
 ![Data](https://raw.githubusercontent.com/danerjin/questionAnsweringChatbots/refs/heads/main/data.png)   
 
-## Comparison of GPT Embeddings, vs MiniLM-L6-v2 embeddings:  
+# Comparison of GPT Embeddings, vs MiniLM-L6-v2 embeddings:  
 ![Graph](https://raw.githubusercontent.com/danerjin/questionAnsweringChatbots/refs/heads/main/graphs.png)
 
