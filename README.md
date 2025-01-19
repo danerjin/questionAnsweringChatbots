@@ -36,3 +36,6 @@ Build Retrieval System - similar to attention. Unfortunately, did not have time 
 # Comparison of GPT Embeddings, vs MiniLM-L6-v2 embeddings:  
 ![Graph](https://raw.githubusercontent.com/danerjin/questionAnsweringChatbots/refs/heads/main/graphs.png)
 
+# Acknowledgements  
+[LLMs-from-scratch](https://github.com/rasbt/LLMs-from-scratch) by rasbt
+
