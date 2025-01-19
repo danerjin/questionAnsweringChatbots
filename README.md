@@ -20,3 +20,10 @@ Then, finetune the embedding model:
 `python embedding.py`  
 Finally, evaluate the RAG system:   
 `python eval.py`
+
+## DATA:   
+![Data](https://raw.githubusercontent.com/danerjin/questionAnsweringChatbots/refs/heads/main/data.png)   
+
+## Comparison of GPT Embeddings, vs MiniLM-L6-v2 embeddings:  
+![Graph](https://raw.githubusercontent.com/danerjin/questionAnsweringChatbots/refs/heads/main/graphs.png)
+
